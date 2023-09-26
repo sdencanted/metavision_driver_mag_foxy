@@ -14,7 +14,7 @@
 # limitations under the License.
 
 cmake_minimum_required(VERSION 3.5)
-project(metavision_driver)
+project(metavision_driver_mag_foxy)
 
 include(FetchContent)
 

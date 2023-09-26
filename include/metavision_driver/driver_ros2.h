@@ -56,7 +56,9 @@ private:
   // related to dynanmic config (runtime parameter update)
   rcl_interfaces::msg::SetParametersResult parameterChanged(
     const std::vector<rclcpp::Parameter> & params);
-  void onParameterEvent(std::shared_ptr<const rcl_interfaces::msg::ParameterEvent> event);
+  // void onParameterEvent(std::shared_ptr<const rcl_interfaces::msg::ParameterEvent> event);
+  void onParameterEvent(rcl_interfaces::msg::ParameterEvent::SharedPtr event);
+  
   void addBiasParameter(const std::string & n, const BiasParameter & bp);
   void initializeBiasParameters(const std::string & sensorVersion);
   void declareBiasParameters(const std::string & sensorVersion);
