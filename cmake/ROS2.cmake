@@ -55,6 +55,25 @@ endforeach()
 
 ament_auto_find_build_dependencies(REQUIRED ${ROS2_DEPENDENCIES})
 
+# Mag driver
+# compile mag library
+set(theta_events_mag_SOURCE_FILES 
+  src/rm3100_spi_userspace.c
+)
+add_library(theta_events_mag ${theta_events_mag_SOURCE_FILES})
+target_include_directories(theta_events_mag PUBLIC
+  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+  $<INSTALL_INTERFACE:include>
+)
+target_link_libraries(theta_events_mag
+  m
+  gpiod
+)
+install(TARGETS theta_events_mag  
+  DESTINATION lib
+)
+
+
 #
 # --------- driver (composable component) -------------
 
@@ -64,7 +83,7 @@ ament_auto_add_library(driver_ros2 SHARED
   src/driver_ros2.cpp)
 
 target_include_directories(driver_ros2 PRIVATE include)
-target_link_libraries(driver_ros2 MetavisionSDK::driver)
+target_link_libraries(driver_ros2 MetavisionSDK::driver theta_events_mag)
 
 rclcpp_components_register_nodes(driver_ros2 "metavision_driver::DriverROS2")
 

@@ -17,6 +17,7 @@
 #define METAVISION_DRIVER__DRIVER_ROS2_H_
 
 #include <event_camera_msgs/msg/event_packet.hpp>
+#include <event_camera_msgs/msg/mag_event_packet.hpp>
 #include <map>
 #include <memory>
 #include <rclcpp/rclcpp.hpp>
@@ -34,7 +35,8 @@ class MetavisionWrapper;  // forward decl
 
 class DriverROS2 : public rclcpp::Node, public CallbackHandler
 {
-  using EventPacketMsg = event_camera_msgs::msg::EventPacket;
+  // using EventPacketMsg = event_camera_msgs::msg::EventPacket;
+  using MagEventPacketMsg = event_camera_msgs::msg::MagEventPacket;
   using Trigger = std_srvs::srv::Trigger;
 
 public:
@@ -56,9 +58,8 @@ private:
   // related to dynanmic config (runtime parameter update)
   rcl_interfaces::msg::SetParametersResult parameterChanged(
     const std::vector<rclcpp::Parameter> & params);
-  // void onParameterEvent(std::shared_ptr<const rcl_interfaces::msg::ParameterEvent> event);
-  void onParameterEvent(rcl_interfaces::msg::ParameterEvent::SharedPtr event);
-  
+  void onParameterEvent(std::shared_ptr<const rcl_interfaces::msg::ParameterEvent> event);
+  // void onParameterEvent(rcl_interfaces::msg::ParameterEvent::SharedPtr event);
   void addBiasParameter(const std::string & n, const BiasParameter & bp);
   void initializeBiasParameters(const std::string & sensorVersion);
   void declareBiasParameters(const std::string & sensorVersion);
@@ -80,8 +81,9 @@ private:
   uint64_t lastMessageTime_{0};
   uint64_t messageThresholdTime_{0};  // threshold time for sending message
   size_t messageThresholdSize_{0};    // threshold size for sending message
-  EventPacketMsg::UniquePtr msg_;
-  rclcpp::Publisher<EventPacketMsg>::SharedPtr eventPub_;
+  // EventPacketMsg::UniquePtr msg_;
+  MagEventPacketMsg::UniquePtr msg_;
+  rclcpp::Publisher<MagEventPacketMsg>::SharedPtr eventPub_;
   // ------ related to sync
   rclcpp::Service<Trigger>::SharedPtr secondaryReadyServer_;
   rclcpp::TimerBase::SharedPtr oneOffTimer_;
@@ -92,6 +94,9 @@ private:
     parameterSubscription_;
   ParameterMap biasParameters_;
   rclcpp::Service<Trigger>::SharedPtr saveBiasesService_;
+  // ------ Magnetometer related
+  float32_t first_theta_;
+  float32_t last_theta_;
 };
 }  // namespace metavision_driver
 #endif  // METAVISION_DRIVER__DRIVER_ROS2_H_

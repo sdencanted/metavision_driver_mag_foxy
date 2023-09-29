@@ -27,6 +27,13 @@
 #include "metavision_driver/logging.h"
 #include "metavision_driver/metavision_wrapper.h"
 
+extern "C"
+{
+#include "metavision_driver/rm3100_spi_userspace.h"
+}
+
+
+
 namespace metavision_driver
 {
 DriverROS2::DriverROS2(const rclcpp::NodeOptions & options)
@@ -34,6 +41,16 @@ DriverROS2::DriverROS2(const rclcpp::NodeOptions & options)
     "metavision_driver",
     rclcpp::NodeOptions(options).automatically_declare_parameters_from_overrides(true))
 {
+  start_mag();
+  start_drdy();
+  int revid_id = get_revid_id();
+  printf("REVID(correct ID is 22): %X\n", revid_id);
+  uint16_t cycle_count = 50;
+  change_cycle_count(cycle_count);
+  set_continuous_measurement(false);
+  uint8_t tmrc_value = 0x92;
+  set_tmrc(tmrc_value);
+  set_continuous_measurement(true);
   configureWrapper(get_name());
 
   this->get_parameter_or("encoding", encoding_, std::string("evt3"));
@@ -50,7 +67,7 @@ DriverROS2::DriverROS2(const rclcpp::NodeOptions & options)
 
   int qs;
   this->get_parameter_or("send_queue_size", qs, 1000);
-  eventPub_ = this->create_publisher<EventPacketMsg>(
+  eventPub_ = this->create_publisher<MagEventPacketMsg>(
     "~/events", rclcpp::QoS(rclcpp::KeepLast(qs)).best_effort().durability_volatile());
 
   if (wrapper_->getSyncMode() == "primary") {
@@ -84,6 +101,8 @@ DriverROS2::DriverROS2(const rclcpp::NodeOptions & options)
 
 DriverROS2::~DriverROS2()
 {
+  end_mag();
+  end_drdy();
   stop();
   wrapper_.reset();  // invoke destructor
 }
@@ -123,8 +142,8 @@ rcl_interfaces::msg::SetParametersResult DriverROS2::parameterChanged(
   return (res);
 }
 
-// void DriverROS2::onParameterEvent(std::shared_ptr<const rcl_interfaces::msg::ParameterEvent> event)
-void DriverROS2::onParameterEvent(rcl_interfaces::msg::ParameterEvent::SharedPtr event)
+void DriverROS2::onParameterEvent(std::shared_ptr<const rcl_interfaces::msg::ParameterEvent> event)
+// void DriverROS2::onParameterEvent(rcl_interfaces::msg::ParameterEvent::SharedPtr event)
 {
   if (event->node != this->get_fully_qualified_name()) {
     return;
@@ -133,8 +152,14 @@ void DriverROS2::onParameterEvent(rcl_interfaces::msg::ParameterEvent::SharedPtr
   for (auto it = biasParameters_.begin(); it != biasParameters_.end(); ++it) {
     validEvents.push_back(it->first);
   }
+  //ORIGINAL
   rclcpp::ParameterEventsFilter filter(
     event, validEvents, {rclcpp::ParameterEventsFilter::EventType::CHANGED});
+  
+  //START
+  // rclcpp::ParameterEventsFilter filter(
+  //   event, validEvents, std::vector<rclcpp::ParameterEventsFilter::EventType>{rclcpp::ParameterEventsFilter::EventType::CHANGED});
+  //END
   for (auto & it : filter.get_events()) {
     const std::string & name = it.second->name;
     const auto bp_it = biasParameters_.find(name);
@@ -357,7 +382,7 @@ void DriverROS2::rawDataCallback(uint64_t t, const uint8_t * start, const uint8_
 {
   if (eventPub_->get_subscription_count() > 0) {
     if (!msg_) {
-      msg_.reset(new EventPacketMsg());
+      msg_.reset(new MagEventPacketMsg());
       msg_->header.frame_id = frameId_;
       msg_->time_base = 0;  // not used here
       msg_->encoding = encoding_;
@@ -369,11 +394,24 @@ void DriverROS2::rawDataCallback(uint64_t t, const uint8_t * start, const uint8_
     }
     const size_t n = end - start;
     auto & events = msg_->events;
+    // auto & packet_idx = msg_->packet_idx;
     const size_t oldSize = events.size();
+    // const size_t oldSizePacket = packet_idx.size();
+    // resize_hack(packet_idx, oldSizePacket + 1);
+    // packet_idx[oldSizePacket]=(uint16_t)oldSize;
     resize_hack(events, oldSize + n);
     memcpy(reinterpret_cast<void *>(events.data() + oldSize), start, n);
+    // LOG_INFO_FMT("starting byte is %X, what i recorded is %X", *start, events[oldSize]);
 
-    if (t - lastMessageTime_ > messageThresholdTime_ || events.size() > messageThresholdSize_) {
+
+    // if (t - lastMessageTime_ > messageThresholdTime_ || events.size() > messageThresholdSize_) {
+    if (get_measurement_ready_drdy()) {
+      msg_->first_theta = first_theta_;
+      struct Measurements res;
+      res=get_measurement(0,true);
+      last_theta_ = atan2((float32_t)res.y, (float32_t)res.x) + M_PIl;
+      msg_->last_theta = last_theta_;
+      first_theta_=last_theta_;
       reserveSize_ = std::max(reserveSize_, events.size());
       eventPub_->publish(std::move(msg_));
       lastMessageTime_ = t;
